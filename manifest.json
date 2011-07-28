@@ -1,0 +1,20 @@
+{
+  "name": "Dribbble Following Me",
+  "version": "1.0",
+  "update_url": "http://hami.sh/extensions/updates.xml",
+  "description": "Visually shows if a user is following you on dribbble.",
+  "permissions": [
+    "tabs", "http://dribbble.com/*", "http://api.dribbble.com/*"
+  ],
+  "icons": { "16": "icon16.png",
+           	"48": "icon48.png",
+          	"128": "icon128.png" },
+ "background_page" : "background.html",
+ "content_scripts": [
+    {
+      "matches": ["http://dribbble.com/shots/*"],
+      "css": ["dribbble.css"],
+      "js": ["jquery.min.js", "dribbble.js"]
+    }
+  ]
+}	

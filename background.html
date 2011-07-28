@@ -1,0 +1,142 @@
+<!--
+   ======================================================================
+   Dribbble Following Me: Background JavaScript
+
+   @author: hamish macpherson
+   @url: http://hami.sh/
+
+-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
+<html>
+	<head>
+	</head>
+	<body>
+		<script>
+		
+		var CACHE_TOKEN = "|following|";
+		var CACHE_EXPIRE_HRS = 12;	// hours until user cache expires
+		var LOCALSTORAGE_KEY = "dribbble-following-cache";
+		
+		function start()
+		{
+			// Set the listener
+			chrome.extension.onRequest.addListener(onRequest);
+		}
+				
+		function cacheUser(username, current_user, follow)
+		{
+			var cachekey = username + CACHE_TOKEN + current_user;
+			var datestamp = (new Date()).getTime();
+			var cachevalue = [follow, datestamp];
+			
+			// Stash it away
+			console.log("Adding cache for " + cachekey + " = " + cachevalue);
+			localStorage[LOCALSTORAGE_KEY + cachekey] = JSON.stringify(cachevalue);
+		}
+		
+		function getCache(username, current_user)
+		{
+			var cachekey = username + CACHE_TOKEN + current_user;			
+			console.log("Checking cache for " + cachekey);
+			try { return JSON.parse(localStorage[LOCALSTORAGE_KEY + cachekey]); }
+			catch (e)
+			{
+				console.log("Cache key not found for " + cachekey);
+				return false;
+			}
+		}
+				
+		function handleRequest(xhr, data, current_user, username, current_page, callback)
+		{
+			if (xhr.readyState == 4)
+			{
+				if (xhr.status == 200) 
+				{
+			  		var data = JSON.parse(xhr.responseText);
+					
+					console.log("Trying page " + current_page + " / " + data.pages);
+										
+					for (following in data.players)
+					{
+						if (data.players[following].username == current_user)
+						{
+							// Store in the cache
+							cacheUser(username, current_user, true);
+							// Return to caller
+							callback(true);
+							return;
+						}
+					}
+					
+					// Dribbble forces pagination on their results so we'll have to
+					// request each page until we find the current user (or not.)
+					// NOTE: This means lots of API calls, but it's the only solution right now
+					current_page++;
+					if (current_page <= data.pages)
+					{
+						fetchDribbbleFollowing(current_user, username, current_page, callback);
+					}
+					else
+					{
+						// Looks like the current_user is not being followed
+						cacheUser(username, current_user, false);
+						callback(false);
+					}
+				} 
+				else 
+				{
+					// HTTP Error
+					console.log("Bagouch! HTTP Error. Too many requests maybe?");
+				}
+			}			
+		}		
+		
+		function fetchDribbbleFollowing(current_user, username, current_page, callback) 
+		{
+			console.log("fetchDribbbleFollowing called");
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange = function(data) { handleRequest(xhr, data, current_user, username, current_page, callback); };
+						
+			// Send the request
+			var url = 'http://api.dribbble.com/players/' + username + '/following?per_page=30&page=' + current_page;
+			xhr.open('GET', url, true);
+			xhr.send();
+		};
+
+		function onRequest(request, sender, callback) 
+		{
+			if (request.action == 'fetchDribbbleFollowing') 
+			{
+				// Check our cache first
+				cached = getCache(request.username, request.current_user);
+				if (cached)
+				{
+					datestamp = cached[1];
+					current_datestamp = (new Date()).getTime();
+					diff = current_datestamp - datestamp;
+					console.log("Cache date difference = " + diff);
+					if (diff <= ((1000 * 60 * 60) * CACHE_EXPIRE_HRS))
+					{
+						callback(cached[0]);
+					}
+					else
+					{
+						// Expired cache
+						console.log("Cache was expired, polling API.");
+						fetchDribbbleFollowing(request.current_user, request.username, request.current_page, callback);
+					}
+				}
+				else
+				{
+					// Not cached
+					console.log("Cache not found, polling API.");
+					fetchDribbbleFollowing(request.current_user, request.username, request.current_page, callback);
+				}
+			}
+		};
+		
+		start();
+		
+		</script>
+	</body>
+</html>
